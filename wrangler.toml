@@ -1,0 +1,8 @@
+name = "linkedin-photo-gen"
+# Entry point for the Worker. Relative to repo root.
+main = "./workers/generate.js"
+# Define compatibility date matching the date of deployment to ensure stable behaviour.
+compatibility_date = "2025-07-30"
+
+# We intentionally avoid specifying account_id, routes or KV bindings here.
+# Those will be discovered and configured via `wrangler publish` using your logged‑in Cloudflare account.
