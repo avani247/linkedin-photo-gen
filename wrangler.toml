@@ -3,6 +3,9 @@ name = "linkedin-photo-gen"
 main = "./workers/generate.js"
 # Define compatibility date matching the date of deployment to ensure stable behaviour.
 compatibility_date = "2025-07-30"
+account_id = "555c4bd12536bc455e095c1512a0d5e8"
+workers_dev = true
+
 
 # We intentionally avoid specifying account_id, routes or KV bindings here.
 # Those will be discovered and configured via `wrangler publish` using your logged‑in Cloudflare account.
