@@ -69,3 +69,7 @@ When deploying to Vercel, add these keys under **Project Settings → Environmen
 ## 🤝 Contributing
 
 Fork the repo, create a branch and open a pull request.  Bug reports and feature requests are welcome!
+
+## 🤝 The End
+Bye Bye
+
