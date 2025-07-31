@@ -12,14 +12,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install wrangler
-        run: npm install -g wrangler
-      - name: Set secrets and publish
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          secrets: |
+            BFL_API_KEY
+            GS_WEBHOOK_URL
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           BFL_API_KEY: ${{ secrets.BFL_API_KEY }}
           GS_WEBHOOK_URL: ${{ secrets.GS_WEBHOOK_URL }}
-        run: |
-          echo "$BFL_API_KEY" | wrangler secret put BFL_API_KEY --yes
-          echo "$GS_WEBHOOK_URL" | wrangler secret put GS_WEBHOOK_URL --yes
-          wrangler publish
