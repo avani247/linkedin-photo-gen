@@ -13,10 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Deploy
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v2
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          wranglerVersion: '3.26.0'
           secrets: |
             BFL_API_KEY
             GS_WEBHOOK_URL
