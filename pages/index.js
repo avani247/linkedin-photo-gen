@@ -2,7 +2,7 @@ import Head from 'next/head';
 import { useState } from 'react';
 
 /**
- * Landing page component.  Presents a marketing section and a form
+ * Landing page component. Presents a marketing section and a form
  * for users to submit their name, email, phone and headshot image.
  * Uses Tailwind CSS via CDN for styling.
  */
@@ -17,15 +17,43 @@ export default function Home() {
   const [resultUrl, setResultUrl] = useState('');
 
   /**
-   * Convert a File into a base64 encoded string.  Returns a promise
-   * that resolves with the base64 value (including the data URI prefix).
+   * Resize an image file down to a reasonable size before
+   * encoding it. This helps avoid large payloads that exceed
+   * Vercel’s function body size limits. The returned value
+   * includes the data URI prefix.
+   *
+   * @param {File} imageFile
+   * @returns {Promise<string>} base64 encoded data URI
    */
-  const toBase64 = (file) => {
+  const resizeAndEncode = (imageFile) => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
+      const img = new Image();
+      img.onload = () => {
+        // Define max dimension; maintain aspect ratio
+        const maxDim = 800;
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxDim) {
+            height = (height * maxDim) / width;
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = (width * maxDim) / height;
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Use JPEG to further compress; 0.9 quality
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        resolve(dataUrl);
+      };
+      img.onerror = (err) => reject(err);
+      img.src = URL.createObjectURL(imageFile);
     });
   };
 
@@ -54,8 +82,8 @@ export default function Home() {
   };
 
   /**
-   * Handle form submission.  Converts the image to base64, calls the
-   * API route and displays the resulting headshot.  Displays
+   * Handle form submission. Converts the image to base64, calls the
+   * API route and displays the resulting headshot. Displays
    * appropriate error messages on failure.
    */
   const handleSubmit = async (e) => {
@@ -64,12 +92,14 @@ export default function Home() {
     setLoading(true);
     setResultUrl('');
     try {
-      const base64 = await toBase64(file);
+      // Resize and encode the image before sending to the API.
+      const resized = await resizeAndEncode(file);
       const payload = {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
-        base64Image: base64.split(',')[1] ?? ''
+        // Strip the prefix (e.g. "data:image/jpeg;base64,") so only the raw base64 string is sent.
+        base64Image: resized.split(',')[1] ?? ''
       };
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -77,7 +107,8 @@ export default function Home() {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        throw new Error('Failed to generate headshot');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to generate headshot');
       }
       const data = await res.json();
       setResultUrl(data.output_url);
@@ -88,7 +119,7 @@ export default function Home() {
       setFile(null);
       setErrors({});
     } catch (err) {
-      // generic error message displayed under the submit button
+      // Generic error message displayed under the submit button
       setErrors((prev) => ({ ...prev, submit: err.message || 'An error occurred' }));
     } finally {
       setLoading(false);
@@ -98,7 +129,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>LinkedIn Photo Generator</title>
+      <title>LinkedIn Photo Generator</title>
         <meta name="description" content="Generate a professional LinkedIn headshot for free" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {/* Inject Tailwind CSS via CDN */}
@@ -154,7 +185,9 @@ export default function Home() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className={`w-full border rounded px-3 py-2 ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                  className={`w-full border rounded px-3 py-2 ${
+                    errors.name ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="Your name"
                   required
                 />
@@ -166,7 +199,9 @@ export default function Home() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={`w-full border rounded px-3 py-2 ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                  className={`w-full border rounded px-3 py-2 ${
+                    errors.email ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="you@example.com"
                   required
                 />
@@ -178,7 +213,9 @@ export default function Home() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className={`w-full border rounded px-3 py-2 ${errors.phone ? 'border-red-500' : 'border-gray-300'}`}
+                  className={`w-full border rounded px-3 py-2 ${
+                    errors.phone ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="Phone number"
                   required
                 />
@@ -199,7 +236,9 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full bg-blue-600 text-white px-6 py-3 rounded-full font-semibold shadow hover:bg-blue-700 focus:outline-none ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full bg-blue-600 text-white px-6 py-3 rounded-full font-semibold shadow hover:bg-blue-700 focus:outline-none ${
+                  loading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 {loading ? 'Generating…' : 'Submit'}
               </button>
@@ -208,7 +247,11 @@ export default function Home() {
             {resultUrl && (
               <div className="mt-6 text-center">
                 <h3 className="text-xl font-semibold mb-2">Your AI‑Generated Headshot</h3>
-                <img src={resultUrl} alt="Generated headshot" className="mx-auto w-48 h-48 object-cover rounded-full shadow" />
+                <img
+                  src={resultUrl}
+                  alt="Generated headshot"
+                  className="mx-auto w-48 h-48 object-cover rounded-full shadow"
+                />
                 <a
                   href={resultUrl}
                   download
