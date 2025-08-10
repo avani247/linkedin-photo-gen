@@ -1,11 +1,6 @@
 import Head from 'next/head';
 import { useState } from 'react';
 
-/**
- * Landing page component. Presents a marketing section and a form
- * for users to submit their name, email, phone and headshot image.
- * Uses Tailwind CSS via CDN for styling.
- */
 export default function Home() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -14,22 +9,13 @@ export default function Home() {
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [resultUrl, setResultUrl] = useState('');
+  const [resultUrls, setResultUrls] = useState([]); // now holds up to 4
 
-  /**
-   * Resize an image file down to a reasonable size before
-   * encoding it. This helps avoid large payloads that exceed
-   * Vercel’s function body size limits. The returned value
-   * includes the data URI prefix.
-   *
-   * @param {File} imageFile
-   * @returns {Promise<string>} base64 encoded data URI
-   */
+  // Resize + compress before sending (keeps payload small)
   const resizeAndEncode = (imageFile) => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
-        // Define max dimension; maintain aspect ratio
         const maxDim = 800;
         let { width, height } = img;
         if (width > height) {
@@ -48,7 +34,6 @@ export default function Home() {
         canvas.height = Math.round(height);
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        // Use JPEG to further compress; 0.9 quality
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         resolve(dataUrl);
       };
@@ -57,10 +42,6 @@ export default function Home() {
     });
   };
 
-  /**
-   * Validate form fields and set error messages if needed.
-   * Returns true if the form is valid.
-   */
   const validate = () => {
     const errs = {};
     if (!name.trim()) errs.name = 'Name is required';
@@ -69,9 +50,7 @@ export default function Home() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errs.email = 'Invalid email address';
     }
-    if (!phone.trim()) {
-      errs.phone = 'Phone is required';
-    }
+    if (!phone.trim()) errs.phone = 'Phone is required';
     if (!file) {
       errs.file = 'Headshot image is required';
     } else if (!file.type.startsWith('image/')) {
@@ -81,45 +60,38 @@ export default function Home() {
     return Object.keys(errs).length === 0;
   };
 
-  /**
-   * Handle form submission. Converts the image to base64, calls the
-   * API route and displays the resulting headshot. Displays
-   * appropriate error messages on failure.
-   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    setResultUrl('');
+    setResultUrls([]);
     try {
-      // Resize and encode the image before sending to the API.
       const resized = await resizeAndEncode(file);
       const payload = {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
-        // Strip the prefix (e.g. "data:image/jpeg;base64,") so only the raw base64 string is sent.
-        base64Image: resized.split(',')[1] ?? ''
+        base64Image: (resized.split(',')[1] ?? ''), // raw base64
       };
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to generate headshot');
+        throw new Error(data.error || 'Failed to generate headshots');
       }
-      const data = await res.json();
-      setResultUrl(data.output_url);
-      // Reset form fields
+      const urls = Array.isArray(data.output_urls) ? data.output_urls : [];
+      setResultUrls(urls);
+
+      // clear form
       setName('');
       setEmail('');
       setPhone('');
       setFile(null);
       setErrors({});
     } catch (err) {
-      // Generic error message displayed under the submit button
       setErrors((prev) => ({ ...prev, submit: err.message || 'An error occurred' }));
     } finally {
       setLoading(false);
@@ -129,14 +101,14 @@ export default function Home() {
   return (
     <>
       <Head>
-      <title>LinkedIn Photo Generator</title>
+        <title>LinkedIn Photo Generator</title>
         <meta name="description" content="Generate a professional LinkedIn headshot for free" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {/* Inject Tailwind CSS via CDN */}
+        {/* Tailwind via CDN */}
         <script src="https://cdn.tailwindcss.com"></script>
       </Head>
       <main className="min-h-screen flex flex-col items-center justify-start bg-gray-50">
-        {/* Hero section */}
+        {/* Hero */}
         <section className="w-full py-12 px-4 text-center">
           <div className="max-w-3xl mx-auto">
             <img src="/timespro.png" alt="TimesPro Logo" className="h-16 mx-auto mb-4" />
@@ -144,9 +116,9 @@ export default function Home() {
               Get a Professional LinkedIn Headshot – Free
             </h1>
             <p className="text-gray-700 text-lg md:text-xl mb-8">
-              TimesPro presents an AI‑powered headshot generator to elevate your profile.
+              TimesPro presents an AI-powered headshot generator to elevate your profile.
             </p>
-            {/* Example before/after image */}
+            {/* Example */}
             <div className="flex flex-col md:flex-row items-center justify-center gap-6 mb-8">
               <div>
                 <img
@@ -175,7 +147,8 @@ export default function Home() {
             )}
           </div>
         </section>
-        {/* Form section */}
+
+        {/* Form */}
         {showForm && (
           <section className="w-full max-w-md px-4 pb-12">
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md space-y-4">
@@ -243,22 +216,29 @@ export default function Home() {
                 {loading ? 'Generating…' : 'Submit'}
               </button>
             </form>
-            {/* Result section */}
-            {resultUrl && (
-              <div className="mt-6 text-center">
-                <h3 className="text-xl font-semibold mb-2">Your AI‑Generated Headshot</h3>
-                <img
-                  src={resultUrl}
-                  alt="Generated headshot"
-                  className="mx-auto w-48 h-48 object-cover rounded-full shadow"
-                />
-                <a
-                  href={resultUrl}
-                  download
-                  className="mt-4 inline-block bg-green-600 text-white px-4 py-2 rounded-full hover:bg-green-700"
-                >
-                  Download My Headshot
-                </a>
+
+            {/* Results: grid of up to 4 */}
+            {resultUrls.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-xl font-semibold mb-4 text-center">Your AI-Generated Headshots</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {resultUrls.map((url, idx) => (
+                    <div key={idx} className="bg-white p-4 rounded-lg shadow text-center">
+                      <img
+                        src={url}
+                        alt={`Generated headshot ${idx + 1}`}
+                        className="mx-auto w-40 h-40 object-cover rounded-full shadow"
+                      />
+                      <a
+                        href={url}
+                        download
+                        className="mt-3 inline-block bg-green-600 text-white px-4 py-2 rounded-full hover:bg-green-700"
+                      >
+                        Download #{idx + 1}
+                      </a>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>
