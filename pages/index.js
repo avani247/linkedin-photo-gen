@@ -9,7 +9,7 @@ export default function Home() {
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [resultUrls, setResultUrls] = useState([]); // now holds up to 4
+  const [resultUrls, setResultUrls] = useState([]); // up to 4 urls
 
   // Resize + compress before sending (keeps payload small)
   const resizeAndEncode = (imageFile) => {
@@ -118,23 +118,23 @@ export default function Home() {
             <p className="text-gray-700 text-lg md:text-xl mb-8">
               TimesPro presents an AI-powered headshot generator to elevate your profile.
             </p>
-            {/* Example */}
+            {/* Example: Arya old/new */}
             <div className="flex flex-col md:flex-row items-center justify-center gap-6 mb-8">
               <div>
                 <img
-                  src="/example.png"
-                  alt="Before headshot"
+                  src="/arya-old.jpeg"
+                  alt="Arya – Original"
                   className="w-40 h-40 object-cover rounded-full shadow-md"
                 />
-                <p className="mt-2 text-sm text-gray-600">Original</p>
+                <p className="mt-2 text-sm text-gray-600">Arya – Original</p>
               </div>
               <div>
                 <img
-                  src="/example.png"
-                  alt="After headshot"
-                  className="w-40 h-40 object-cover rounded-full shadow-md grayscale"
+                  src="/arya-new.jpeg"
+                  alt="Arya – Generated (example)"
+                  className="w-40 h-40 object-cover rounded-full shadow-md"
                 />
-                <p className="mt-2 text-sm text-gray-600">Generated (example)</p>
+                <p className="mt-2 text-sm text-gray-600">Arya – Generated (example)</p>
               </div>
             </div>
             {!showForm && (
