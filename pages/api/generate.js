@@ -1,19 +1,18 @@
 // pages/api/generate.js
 
 /**
- * Generates FOUR headshots via BFL, posts lead to Google Sheets regardless of success.
- * - Tries /v1/flux-kontext-pro (image-to-image) first; falls back to /v1/flux-pro-1.1.
- * - Sends both x-key and x-api-key headers for compatibility.
- * - Polls polling_url until Ready (up to 60s).
+ * Generates up to FOUR headshots via BFL and ALWAYS posts the lead to Google Sheets.
+ * Sheet post is robust: try JSON first; if not OK, fallback to form-encoded with
+ * both machine and human-readable field names (Name, Phone Number, Email).
  *
- * Env in Vercel:
+ * Env vars in Vercel:
  *  - BFL_API_KEY
  *  - GS_WEBHOOK_URL
  */
 
 export const config = {
   api: {
-    bodyParser: { sizeLimit: '6mb' }, // safety net; frontend already compresses
+    bodyParser: { sizeLimit: '6mb' }, // frontend compresses; this is just a safety net
   },
 };
 
@@ -41,144 +40,95 @@ const PROMPT = [
   `Lighting: Soft, even front lighting with minimal shadows for a clean corporate look.`,
 ].join('\n');
 
+class InsufficientCreditsError extends Error {
+  constructor(msg) {
+    super(msg);
+    this.name = 'InsufficientCreditsError';
+  }
+}
+
+const headers = (key) => ({
+  'Content-Type': 'application/json',
+  accept: 'application/json',
+  // Some BFL setups expect x-key, others x-api-key — send both for safety.
+  'x-key': key,
+  'x-api-key': key,
+});
+
 async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+async function createJob({ key, base64, seed }) {
+  // Prefer image-to-image endpoint
+  const kontextBody = {
+    prompt: PROMPT,
+    input_image: base64, // raw base64 (no data: prefix)
+    aspect_ratio: '1:1',
+    output_format: 'jpeg',
+    safety_tolerance: 2,
+    prompt_upsampling: false,
+    seed,
+  };
 
-  const { name, email, phone, base64Image } = req.body || {};
-  if (!name || !email || !phone || !base64Image) {
-    return res.status(400).json({ error: 'Missing name, email, phone or image' });
-  }
+  let createRes = await fetch('https://api.bfl.ai/v1/flux-kontext-pro', {
+    method: 'POST',
+    headers: headers(key),
+    body: JSON.stringify(kontextBody),
+  });
 
-  const BFL_API_KEY = process.env.BFL_API_KEY;
-  const SHEETS_URL = process.env.GS_WEBHOOK_URL;
-
-  const output_urls = [];
-  let generationError = null;
-
-  // Submit a single job; prefer kontext (image→image), fallback to flux-pro-1.1
-  const submit = async (seed) => {
-    const commonHeaders = {
-      'Content-Type': 'application/json',
-      accept: 'application/json',
-      'x-key': BFL_API_KEY,
-      'x-api-key': BFL_API_KEY, // extra compatibility
-    };
-
-    // First try: flux-kontext-pro (image-to-image)
-    const kontextBody = {
+  if (!createRes.ok) {
+    const text = await createRes.text();
+    if (createRes.status === 402 || /insufficient\s*credits/i.test(text)) {
+      throw new InsufficientCreditsError(text || 'Insufficient credits');
+    }
+    // Fallback to text-to-image endpoint
+    const fallbackBody = {
       prompt: PROMPT,
-      input_image: base64Image,      // raw base64 (no data URI)
       aspect_ratio: '1:1',
       output_format: 'jpeg',
       safety_tolerance: 2,
       prompt_upsampling: false,
       seed,
     };
-
-    let createRes = await fetch('https://api.bfl.ai/v1/flux-kontext-pro', {
+    createRes = await fetch('https://api.bfl.ai/v1/flux-pro-1.1', {
       method: 'POST',
-      headers: commonHeaders,
-      body: JSON.stringify(kontextBody),
+      headers: headers(key),
+      body: JSON.stringify(fallbackBody),
     });
-
-    // Fallback if endpoint not available
     if (!createRes.ok) {
-      // Second try: flux-pro-1.1 (text-to-image). We still use the prompt;
-      // some stacks ignore input_image here.
-      const fallbackBody = {
-        prompt: PROMPT,
-        aspect_ratio: '1:1',
-        output_format: 'jpeg',
-        safety_tolerance: 2,
-        prompt_upsampling: false,
-        seed,
-      };
-
-      createRes = await fetch('https://api.bfl.ai/v1/flux-pro-1.1', {
-        method: 'POST',
-        headers: commonHeaders,
-        body: JSON.stringify(fallbackBody),
-      });
-
-      if (!createRes.ok) {
-        const text = await createRes.text();
-        throw new Error(`BFL create error: ${text}`);
+      const text2 = await createRes.text();
+      if (createRes.status === 402 || /insufficient\s*credits/i.test(text2)) {
+        throw new InsufficientCreditsError(text2 || 'Insufficient credits');
       }
-    }
-
-    const { polling_url } = await createRes.json();
-    return polling_url;
-  };
-
-  const poll = async (polling_url) => {
-    const start = Date.now();
-    while (Date.now() - start < TIMEOUT_MS) {
-      const pollRes = await fetch(polling_url, {
-        method: 'GET',
-        headers: { accept: 'application/json', 'x-key': BFL_API_KEY, 'x-api-key': BFL_API_KEY },
-      });
-      if (!pollRes.ok) {
-        const t = await pollRes.text();
-        throw new Error(`BFL poll error: ${t}`);
-      }
-      const json = await pollRes.json();
-      const status = (json.status || '').toLowerCase();
-      if (status === 'ready') return json?.result?.sample || '';
-      if (status === 'error' || status === 'failed') {
-        throw new Error(`BFL status ${status}: ${JSON.stringify(json)}`);
-      }
-      await sleep(SLEEP_MS);
-    }
-    throw new Error('BFL generation timeout');
-  };
-
-  try {
-    const seeds = Array.from({ length: VARIANTS }, (_, i) => Math.floor(Math.random() * 1e9) + i);
-    const pollingUrls = await Promise.all(seeds.map((s) => submit(s)));
-    const results = await Promise.allSettled(pollingUrls.map((u) => poll(u)));
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) output_urls.push(r.value);
-    }
-    if (!output_urls.length) throw new Error('All generations failed or returned empty URLs.');
-  } catch (err) {
-    generationError = err;
-    console.error('BFL generation error:', err);
-  } finally {
-    // ALWAYS send lead to Google Sheets
-    try {
-      if (SHEETS_URL) {
-        await fetch(SHEETS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name,
-            email,
-            phone,
-            phone_number: phone,                // sheet compatibility
-            output_url: output_urls[0] || '',   // first image (if any)
-            output_urls,                        // all images
-            status: output_urls.length ? 'success' : 'error',
-            error: generationError ? String(generationError.message || generationError) : null,
-            ts: new Date().toISOString(),
-          }),
-        });
-      } else {
-        console.error('GS_WEBHOOK_URL missing.');
-      }
-    } catch (sheetErr) {
-      console.error('Google Sheets webhook error:', sheetErr);
+      throw new Error(`BFL create error: ${text2}`);
     }
   }
 
-  if (output_urls.length) {
-    return res.status(200).json({ output_urls });
-  }
-  return res.status(500).json({ error: 'Headshot generation failed' });
+  const { polling_url } = await createRes.json();
+  return polling_url;
 }
+
+async function pollJob({ key, pollingUrl }) {
+  const start = Date.now();
+  while (Date.now() - start < TIMEOUT_MS) {
+    const pollRes = await fetch(pollingUrl, {
+      method: 'GET',
+      headers: { accept: 'application/json', 'x-key': key, 'x-api-key': key },
+    });
+    if (!pollRes.ok) {
+      const t = await pollRes.text();
+      throw new Error(`BFL poll error: ${t}`);
+    }
+    const json = await pollRes.json();
+    const status = (json.status || '').toLowerCase();
+    if (status === 'ready') return json?.result?.sample || '';
+    if (status === 'error' || status === 'failed') {
+      throw new Error(`BFL status ${status}: ${JSON.stringify(json)}`);
+    }
+    await sleep(SLEEP_MS);
+  }
+  throw new Error('BFL generation timeout');
+}
+
+/** Post to Google Sheets with robust fallbacks and**
