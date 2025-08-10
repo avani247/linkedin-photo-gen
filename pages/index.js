@@ -80,6 +80,11 @@ export default function Home() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 402) {
+          throw new Error(
+            'We’re temporarily out of AI credits. Your details are saved—we’ll be back soon!'
+          );
+        }
         throw new Error(data.error || 'Failed to generate headshots');
       }
       const urls = Array.isArray(data.output_urls) ? data.output_urls : [];
@@ -118,11 +123,12 @@ export default function Home() {
             <p className="text-gray-700 text-lg md:text-xl mb-8">
               TimesPro presents an AI-powered headshot generator to elevate your profile.
             </p>
-            {/* Example: keep original captions; just swap image sources */}
+
+            {/* Example: keep captions; just swap image sources */}
             <div className="flex flex-col md:flex-row items-center justify-center gap-6 mb-8">
               <div>
                 <img
-                  src="/arya%20old.jpeg"
+                  src="/arya-old.jpeg?v=1"
                   alt="Original"
                   className="w-40 h-40 object-cover rounded-full shadow-md"
                 />
@@ -130,13 +136,14 @@ export default function Home() {
               </div>
               <div>
                 <img
-                  src="/arya%20new.jpeg"
+                  src="/arya-new.jpeg?v=1"
                   alt="Generated (example)"
                   className="w-40 h-40 object-cover rounded-full shadow-md"
                 />
                 <p className="mt-2 text-sm text-gray-600">Generated (example)</p>
               </div>
             </div>
+
             {!showForm && (
               <button
                 onClick={() => setShowForm(true)}
