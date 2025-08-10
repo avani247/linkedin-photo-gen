@@ -118,23 +118,23 @@ export default function Home() {
             <p className="text-gray-700 text-lg md:text-xl mb-8">
               TimesPro presents an AI-powered headshot generator to elevate your profile.
             </p>
-            {/* Example: Arya old/new */}
+            {/* Example: keep original captions; just swap image sources */}
             <div className="flex flex-col md:flex-row items-center justify-center gap-6 mb-8">
               <div>
                 <img
-                  src="/arya-old.jpeg"
-                  alt="Arya – Original"
+                  src="/arya%20old.jpeg"
+                  alt="Original"
                   className="w-40 h-40 object-cover rounded-full shadow-md"
                 />
-                <p className="mt-2 text-sm text-gray-600">Arya – Original</p>
+                <p className="mt-2 text-sm text-gray-600">Original</p>
               </div>
               <div>
                 <img
-                  src="/arya-new.jpeg"
-                  alt="Arya – Generated (example)"
+                  src="/arya%20new.jpeg"
+                  alt="Generated (example)"
                   className="w-40 h-40 object-cover rounded-full shadow-md"
                 />
-                <p className="mt-2 text-sm text-gray-600">Arya – Generated (example)</p>
+                <p className="mt-2 text-sm text-gray-600">Generated (example)</p>
               </div>
             </div>
             {!showForm && (
